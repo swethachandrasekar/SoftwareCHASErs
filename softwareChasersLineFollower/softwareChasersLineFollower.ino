@@ -24,8 +24,10 @@ Pololu3pi robot;
 unsigned int sensors[5]; // an array to hold sensor values
 unsigned int last_proportional = 0;
 long integral = 0;
-
-
+const int LOSTSIZE = 240;
+int leftwheel[LOSTSIZE];
+int rightwheel[LOSTSIZE];
+int pCount = 0, it, lost = 0, str8=0, startFlag=0;
 // This include file allows data to be stored in program space.  The
 // ATmega168 has 16k of program space compared to 1k of RAM, so large
 // pieces of static data should be stored in program space.
@@ -41,6 +43,7 @@ const char demo_name_line2[] PROGMEM = "follower";
 // A couple of simple tunes, stored in program space.
 const char welcome[] PROGMEM = ">g32>>c32";
 const char go[] PROGMEM = "L16 cdegreg4";
+
 
 // Data for generating the characters used in load_custom_characters
 // and display_readings.  By reading levels[] starting at various
@@ -194,12 +197,22 @@ void setup()
   // Play music and wait for it to finish before we start driving.
   OrangutanBuzzer::playFromProgramSpace(go);
   while(OrangutanBuzzer::isPlaying());
+  
 }
 
 // The main function.  This function is repeatedly called by
 // the Arduino framework.
 void loop()
 {
+
+ if(startFlag==0) {
+   for(it=0; it<LOSTSIZE; it++) {
+      leftwheel[it] = 60;
+      rightwheel[it] = 60;
+    } 
+ }
+  startFlag=1;
+  
   // Get the position of the line.  Note that we *must* provide
   // the "sensors" argument to read_line() here, even though we
   // are not interested in the individual sensor readings.
@@ -208,8 +221,34 @@ void loop()
   // The "proportional" term should be 0 when we are on the line.
   int proportional = (int)position - 2000;
   // Tune the P term of PID to allow faster correction
-  proportional*= 1.4; 
   
+//  if(pCount == LOSTSIZE) {
+//    pCount = 0;
+//  }
+//  else {
+//    pCount++;
+//  }
+//  pHistory[pCount] = proportional;
+//  lost = 0;
+//  for(it=0; it<LOSTSIZE; it++) {
+//   if(abs(pHistory[pCount]) > 1950 && abs(pHistory[pCount]) < 2050)
+//    lost++;
+//  }
+  it=0;
+//  if(lost == LOSTSIZE) {
+//     //turn left
+//     OrangutanLCD::clear();
+//     OrangutanLCD::gotoXY(0, 1);
+//     //OrangutanBuzzer::playFromProgramSpace(go);
+//     OrangutanLCD::print("Lost");      
+//
+//     OrangutanMotors::setSpeeds(30, 30);
+//     delay(100);     
+//     proportional*= 1.1; 
+//  }
+  //else {
+     OrangutanLCD::clear();
+     
   // Compute the derivative (change) and integral (sum) of the
   // position.
   int derivative = proportional - last_proportional;
@@ -225,18 +264,87 @@ void loop()
   // the sharpness of the turn.  You can adjust the constants by which
   // the proportional, integral, and derivative terms are multiplied to
   // improve performance.
-  int power_difference = proportional/20 + integral/10000 + derivative*1.5; // 3/2 added as a tune of derivative term
+  int power_difference = proportional/20 + integral/10000 + derivative*1.1; //added as a tune of derivative term
 
   // Compute the actual motor settings.  We never set either motor
   // to a negative value.
-  const int maximum = 130;
+   int maximum = 70;
+
+//  if(lost == LOSTSIZE) {
+//     //turn left
+//     OrangutanLCD::clear();
+//     OrangutanLCD::gotoXY(0, 1);
+//     //OrangutanBuzzer::playFromProgramSpace(go);
+//     OrangutanLCD::print("Lost");      
+//
+//     maximum*= 1.25;
+//     delay(100);     
+     proportional*= 1.1; 
+//  }
+  
   if (power_difference > maximum)
     power_difference = maximum;
   if (power_difference < -maximum)
     power_difference = -maximum;
 
-  if (power_difference < 0)
+  if (power_difference < 0) {
     OrangutanMotors::setSpeeds(maximum + power_difference, maximum);
-  else
+      if(pCount == LOSTSIZE) {
+        pCount = 0;
+      }
+      else {
+        pCount++;
+      }
+      leftwheel[pCount] = maximum + power_difference;
+      lost = 0;
+      for(it=0; it<LOSTSIZE; it++) {
+       if(abs(leftwheel[it]) < 5)
+        lost++;
+//       if(abs(leftwheel[it]) > 63 && abs(leftwheel[it]) << 57)
+//        str8++;
+       }
+       if(lost == LOSTSIZE) {
+          OrangutanMotors::setSpeeds(40, 55);
+          for(it=0; it<LOSTSIZE; it++) {
+            leftwheel[it] = 0;
+         }
+         delay(100);
+         lost=0;
+      }
+//      if(str8 > LOSTSIZE/2) {
+//        OrangutanMotors::setSpeeds(1.5*(maximum + power_difference), 1.5*maximum);
+//        str8=0;
+//      }
+  }
+  else {
     OrangutanMotors::setSpeeds(maximum, maximum - power_difference);
+      if(pCount == LOSTSIZE) {
+        pCount = 0;
+      }
+      else {
+        pCount++;
+      }
+      rightwheel[pCount] = maximum - power_difference;
+      lost = 0;
+      for(it=0; it<LOSTSIZE; it++) {
+       if(abs(rightwheel[it]) < 5)
+        lost++;
+//       if(abs(rightwheel[it]) > 63 && abs(rightwheel[it]) << 57)
+//        str8++;
+//       }
+       if(lost == LOSTSIZE) {
+          OrangutanMotors::setSpeeds(40, 55);
+          for(it=0; it<LOSTSIZE; it++) {
+            rightwheel[it] = 0;
+         }
+           delay(100);
+           lost=0;
+      }
+//      if(str8 > LOSTSIZE/2) {
+//        OrangutanMotors::setSpeeds(1.5*(maximum + power_difference), 1.5*maximum);
+//        str8=0;
+      }
+  }
+
+      
 }
